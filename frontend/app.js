@@ -41,10 +41,8 @@ const elements = {
   loginMessage: document.querySelector("#loginMessage"),
   appMessage: document.querySelector("#appMessage"),
   usDateDisplay: document.querySelector("#usDateDisplay"),
-  sydneyDateDisplay: document.querySelector("#sydneyDateDisplay"),
   generatedAtDisplay: document.querySelector("#generatedAtDisplay"),
   usDateInput: document.querySelector("#usDateInput"),
-  sydneyDateInput: document.querySelector("#sydneyDateInput"),
   includeEventsInput: document.querySelector("#includeEventsInput"),
   generateButton: document.querySelector("#generateButton"),
   historyButton: document.querySelector("#historyButton"),
@@ -135,7 +133,7 @@ async function generateBrief(forceRegenerate, existingId = "") {
   setLoading(true, "Generating brief...");
   const response = await callFunction("generate-market-brief", {
     us_date: elements.usDateInput.value,
-    sydney_date: elements.sydneyDateInput.value,
+    sydney_date: dateInZone(new Date(), "Australia/Sydney"),
     include_next_events: elements.includeEventsInput.checked,
     force_regenerate: forceRegenerate,
   });
@@ -234,7 +232,6 @@ function renderBrief(response) {
   const brief = response.brief_json;
   elements.briefView.classList.remove("hidden");
   elements.usDateDisplay.textContent = brief.us_date || "-";
-  elements.sydneyDateDisplay.textContent = brief.sydney_date || "-";
   elements.generatedAtDisplay.textContent = formatDateTime(response.generated_at || brief.generated_at);
   elements.sourceNotice.textContent = response.warning || "";
   elements.sourceNotice.classList.toggle("hidden", !response.warning);
@@ -540,11 +537,8 @@ function handleApiError(response) {
 function setDefaultDates() {
   const now = new Date();
   const usDate = dateInZone(now, "America/New_York");
-  const sydneyDate = dateInZone(now, "Australia/Sydney");
   elements.usDateInput.value = usDate;
-  elements.sydneyDateInput.value = sydneyDate;
   elements.usDateDisplay.textContent = usDate;
-  elements.sydneyDateDisplay.textContent = sydneyDate;
 }
 
 function setLoading(isLoading, message = "") {
