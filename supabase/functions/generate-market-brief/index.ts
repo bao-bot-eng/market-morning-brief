@@ -27,7 +27,6 @@ Deno.serve(async (request) => {
       sydney_date: safeDate(body.sydney_date) || formatDateInTimeZone(new Date(), "Australia/Sydney"),
     };
     const includeNextEvents = body.include_next_events !== false;
-    const mode = body.mode === "reading" ? "reading" : "quick";
     const forceRegenerate = Boolean(body.force_regenerate);
 
     const supabase = createServiceClient();
@@ -58,7 +57,7 @@ Deno.serve(async (request) => {
       }
     }
 
-    const geminiPayload = buildGeminiRequest(dates, includeNextEvents, mode, previousQuestions);
+    const geminiPayload = buildGeminiRequest(dates, includeNextEvents, previousQuestions);
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${env.geminiModel}:generateContent?key=${env.geminiApiKey}`,
       {
@@ -91,7 +90,7 @@ Deno.serve(async (request) => {
     }
 
     const groundingUrls = extractGroundingUrls(rawGemini);
-    const brief = normalizeBrief(parsed, dates, mode, groundingUrls);
+    const brief = normalizeBrief(parsed, dates, groundingUrls);
     const generatedAt = new Date().toISOString();
     brief.generated_at = generatedAt;
     const markdown = renderMarkdown(brief);
@@ -178,15 +177,12 @@ async function getPreviousObservationQuestions(
 function buildGeminiRequest(
   dates: { us_date: string; sydney_date: string },
   includeNextEvents: boolean,
-  mode: "quick" | "reading",
   previousQuestions: unknown[],
 ) {
   const prompt = `
 Prepare a bilingual English + Simplified Chinese US stock market morning brief for learning and market observation.
 US date: ${dates.us_date}
 Sydney date: ${dates.sydney_date}
-Display mode requested by user: ${mode}
-
 Use Google Search grounding. Focus on today's US premarket context and, if requested, important events in the next 1-2 weeks.
 
 Previous observation questions to follow up, if any:
@@ -225,7 +221,6 @@ Schema:
   "us_date": "${dates.us_date}",
   "sydney_date": "${dates.sydney_date}",
   "generated_at": "",
-  "mode": "${mode}",
   "key_market_background": [
     {
       "theme_en": "",
@@ -312,8 +307,8 @@ Each item inside categories must contain:
 }
 
 Content volume:
-- key_market_background: 3 items for quick mode, 3-5 for reading mode.
-- categories: quick mode can keep each category concise, reading mode can include more.
+- key_market_background: 3-5 most important items.
+- categories: include every relevant, worth-reading item you find. Do not cap categories artificially, but keep each item concise.
 - previous_question_followups: If previous questions are provided, answer them briefly using today's searched context. If there is not enough evidence, say what cannot be answered yet. If no previous questions are provided, return an empty array.
 - observation_questions: 3-5 bilingual questions.
 - ${includeNextEvents ? "Include next_1_2_weeks_watchlist." : "Use an empty next_1_2_weeks_watchlist array."}
@@ -366,7 +361,6 @@ function extractGroundingUrls(rawGemini: Record<string, unknown>) {
 function normalizeBrief(
   parsed: Record<string, unknown>,
   dates: { us_date: string; sydney_date: string },
-  mode: "quick" | "reading",
   groundingUrls: string[],
 ) {
   const fallbackUrl = groundingUrls[0] || "";
@@ -380,7 +374,6 @@ function normalizeBrief(
     us_date: safeString(parsed.us_date) || dates.us_date,
     sydney_date: safeString(parsed.sydney_date) || dates.sydney_date,
     generated_at: safeString(parsed.generated_at),
-    mode,
     key_market_background: normalizeSummaries(parsed.key_market_background),
     hard_events_today: normalizeEvents(parsed.hard_events_today, fallbackUrl),
     categories,

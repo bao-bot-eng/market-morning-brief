@@ -26,7 +26,6 @@ const EXPIRES_KEY = "market_brief_session_expires";
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || "",
   expiresAt: localStorage.getItem(EXPIRES_KEY) || "",
-  mode: "quick",
   currentBrief: null,
   currentMarkdown: "",
   currentGeneratedAt: "",
@@ -44,8 +43,6 @@ const elements = {
   usDateDisplay: document.querySelector("#usDateDisplay"),
   sydneyDateDisplay: document.querySelector("#sydneyDateDisplay"),
   generatedAtDisplay: document.querySelector("#generatedAtDisplay"),
-  quickModeButton: document.querySelector("#quickModeButton"),
-  readingModeButton: document.querySelector("#readingModeButton"),
   usDateInput: document.querySelector("#usDateInput"),
   sydneyDateInput: document.querySelector("#sydneyDateInput"),
   includeEventsInput: document.querySelector("#includeEventsInput"),
@@ -80,6 +77,10 @@ function init() {
   setDefaultDates();
   bindEvents();
   renderAuthState();
+  if (location.hash === "#brief" && !state.currentBrief) {
+    location.hash = "#home";
+  }
+  syncRoute();
   if (isSessionValid()) {
     loadHistory();
   }
@@ -101,8 +102,6 @@ function bindEvents() {
   elements.downloadButton.addEventListener("click", downloadMarkdown);
   elements.copyBriefButton.addEventListener("click", copyMarkdown);
   elements.downloadBriefButton.addEventListener("click", downloadMarkdown);
-  elements.quickModeButton.addEventListener("click", () => setMode("quick"));
-  elements.readingModeButton.addEventListener("click", () => setMode("reading"));
   window.addEventListener("hashchange", syncRoute);
 }
 
@@ -138,7 +137,6 @@ async function generateBrief(forceRegenerate, existingId = "") {
     us_date: elements.usDateInput.value,
     sydney_date: elements.sydneyDateInput.value,
     include_next_events: elements.includeEventsInput.checked,
-    mode: state.mode,
     force_regenerate: forceRegenerate,
   });
   setLoading(false);
@@ -249,12 +247,11 @@ function renderBrief(response) {
   renderWatchlist(brief.next_1_2_weeks_watchlist || []);
   renderFollowUps(brief.previous_question_followups || []);
   renderQuestions(brief.observation_questions || []);
-  applyMode();
 }
 
 function renderSummaries(items) {
   elements.summaryGrid.innerHTML = "";
-  const visible = state.mode === "quick" ? items.slice(0, 3) : items.slice(0, 5);
+  const visible = items;
   if (!visible.length) {
     elements.summaryGrid.innerHTML = emptyCard("No key background returned.");
     return;
@@ -302,8 +299,7 @@ function renderCategories(categories) {
     .sort((a, b) => Number(b.items.length > 0) - Number(a.items.length > 0));
 
   sortedCategories.forEach(({ category, items }) => {
-    const limit = state.mode === "quick" ? 2 : items.length;
-    const cards = items.slice(0, limit).map((item) => newsCard(item, category)).join("");
+    const cards = items.map((item) => newsCard(item, category)).join("");
     const isEmpty = items.length === 0;
     elements.categoryList.appendChild(createNode(`
       <section class="category-section ${isEmpty ? "empty-category" : ""}">
@@ -431,24 +427,6 @@ function renderHistory(items) {
   });
 }
 
-function setMode(mode) {
-  state.mode = mode;
-  elements.quickModeButton.classList.toggle("active", mode === "quick");
-  elements.readingModeButton.classList.toggle("active", mode === "reading");
-  if (state.currentBrief) {
-    renderBrief({
-      brief_json: state.currentBrief,
-      markdown: state.currentMarkdown,
-      generated_at: state.currentGeneratedAt,
-      warning: state.currentWarning,
-    });
-  }
-}
-
-function applyMode() {
-  document.body.dataset.mode = state.mode;
-}
-
 function showBriefView(updateHash = false) {
   elements.homeView.classList.add("hidden");
   elements.briefView.classList.remove("hidden");
@@ -479,6 +457,9 @@ function syncRoute() {
   if (location.hash === "#brief" && state.currentBrief) {
     showBriefView(false);
     return;
+  }
+  if (location.hash === "#brief") {
+    history.replaceState(null, "", "#home");
   }
   showHomeView(false);
 }
