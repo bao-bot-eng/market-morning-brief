@@ -1,0 +1,8 @@
+[functions.login-market-brief]
+verify_jwt = false
+
+[functions.generate-market-brief]
+verify_jwt = false
+
+[functions.briefs-market-brief]
+verify_jwt = false
