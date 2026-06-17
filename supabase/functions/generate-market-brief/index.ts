@@ -32,6 +32,7 @@ Deno.serve(async (request) => {
 
     const supabase = createServiceClient();
     await deleteOldBriefs(supabase);
+    const previousQuestions = await getPreviousObservationQuestions(supabase, dates.us_date);
 
     if (!forceRegenerate) {
       const { data: existing, error: existingError } = await supabase
@@ -57,7 +58,7 @@ Deno.serve(async (request) => {
       }
     }
 
-    const geminiPayload = buildGeminiRequest(dates, includeNextEvents, mode);
+    const geminiPayload = buildGeminiRequest(dates, includeNextEvents, mode, previousQuestions);
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${env.geminiModel}:generateContent?key=${env.geminiApiKey}`,
       {
@@ -157,10 +158,28 @@ async function deleteOldBriefs(supabase: ReturnType<typeof createServiceClient>)
     .lt("generated_at", cutoff.toISOString());
 }
 
+async function getPreviousObservationQuestions(
+  supabase: ReturnType<typeof createServiceClient>,
+  currentUsDate: string,
+) {
+  const { data } = await supabase
+    .from("market_briefs")
+    .select("brief_json")
+    .lt("us_date", currentUsDate)
+    .order("us_date", { ascending: false })
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const questions = (data?.brief_json as Record<string, unknown> | undefined)?.observation_questions;
+  return Array.isArray(questions) ? questions.slice(0, 5) : [];
+}
+
 function buildGeminiRequest(
   dates: { us_date: string; sydney_date: string },
   includeNextEvents: boolean,
   mode: "quick" | "reading",
+  previousQuestions: unknown[],
 ) {
   const prompt = `
 Prepare a bilingual English + Simplified Chinese US stock market morning brief for learning and market observation.
@@ -169,6 +188,9 @@ Sydney date: ${dates.sydney_date}
 Display mode requested by user: ${mode}
 
 Use Google Search grounding. Focus on today's US premarket context and, if requested, important events in the next 1-2 weeks.
+
+Previous observation questions to follow up, if any:
+${JSON.stringify(previousQuestions)}
 
 Core assets: SPY, QQQ, SMH, NVDA, META, MSFT, AVGO, AMD.
 Secondary assets: XLK, XLC, IWM, XLE, XLU, XLF, XLI, XLY, XLV.
@@ -191,6 +213,8 @@ Strict rules:
 - Do not predict today's or tomorrow's price direction.
 - Do not invent URLs or published times.
 - If source is unclear, confidence must be "low".
+- Do not force-fill empty categories, but do include important relevant items even when confidence is medium or low.
+- If an item is important but still developing, include it with confidence "medium" or "low" and explain the uncertainty.
 - Every news/event item must include do_not_overinterpret_en and do_not_overinterpret_zh.
 - Keep English concise and beginner-friendly.
 - Keep Chinese natural and useful for a Chinese-speaking learner.
@@ -251,6 +275,15 @@ Schema:
       "do_not_overinterpret_zh": ""
     }
   ],
+  "previous_question_followups": [
+    {
+      "question_en": "",
+      "question_zh": "",
+      "answer_en": "",
+      "answer_zh": "",
+      "confidence": "high | medium | low"
+    }
+  ],
   "observation_questions": [
     { "en": "", "zh": "" }
   ],
@@ -281,6 +314,7 @@ Each item inside categories must contain:
 Content volume:
 - key_market_background: 3 items for quick mode, 3-5 for reading mode.
 - categories: quick mode can keep each category concise, reading mode can include more.
+- previous_question_followups: If previous questions are provided, answer them briefly using today's searched context. If there is not enough evidence, say what cannot be answered yet. If no previous questions are provided, return an empty array.
 - observation_questions: 3-5 bilingual questions.
 - ${includeNextEvents ? "Include next_1_2_weeks_watchlist." : "Use an empty next_1_2_weeks_watchlist array."}
 `;
@@ -290,7 +324,6 @@ Content volume:
     tools: [{ google_search: {} }],
     generationConfig: {
       temperature: 0.25,
-      responseMimeType: "application/json",
     },
   };
 }
@@ -352,6 +385,7 @@ function normalizeBrief(
     hard_events_today: normalizeEvents(parsed.hard_events_today, fallbackUrl),
     categories,
     next_1_2_weeks_watchlist: normalizeWatchlist(parsed.next_1_2_weeks_watchlist, fallbackUrl),
+    previous_question_followups: normalizeFollowUps(parsed.previous_question_followups),
     observation_questions: normalizeQuestions(parsed.observation_questions),
     not_trading_advice_en:
       safeString(parsed.not_trading_advice_en) ||
@@ -441,6 +475,20 @@ function normalizeWatchlist(value: unknown, fallbackUrl: string) {
   }).filter((item) => item.event_en || item.event_zh);
 }
 
+function normalizeFollowUps(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const record = asRecord(item);
+    return {
+      question_en: safeString(record.question_en || record.en),
+      question_zh: safeString(record.question_zh || record.zh),
+      answer_en: safeString(record.answer_en || record.follow_up_en),
+      answer_zh: safeString(record.answer_zh || record.follow_up_zh),
+      confidence: normalizeConfidence(record.confidence),
+    };
+  }).filter((item) => item.question_en || item.question_zh || item.answer_en || item.answer_zh).slice(0, 5);
+}
+
 function normalizeQuestions(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
@@ -486,16 +534,29 @@ function renderMarkdown(brief: Record<string, any>) {
   lines.push("## 4. Next 1-2 Weeks Watchlist / 未来 1-2 周观察");
   lines.push(...markdownEvents(brief.next_1_2_weeks_watchlist));
   lines.push("");
-  lines.push("## 5. Today's Observation Questions / 今日观察问题");
+  lines.push("## 5. Previous Question Follow-up / 昨日问题回看");
+  lines.push(...markdownFollowUps(brief.previous_question_followups || []));
+  lines.push("");
+  lines.push("## 6. Today's Observation Questions / 今日观察问题");
   for (const question of brief.observation_questions || []) {
     lines.push(`- EN: ${safeString(question.en)}`);
     if (question.zh) lines.push(`  中文: ${safeString(question.zh)}`);
   }
   lines.push("");
-  lines.push("## 6. Not Trading Advice / 非交易建议");
+  lines.push("## 7. Not Trading Advice / 非交易建议");
   lines.push(`- EN: ${brief.not_trading_advice_en}`);
   lines.push(`- 中文: ${brief.not_trading_advice_zh}`);
   return lines.join("\n");
+}
+
+function markdownFollowUps(items: Array<Record<string, unknown>>) {
+  if (!items.length) return ["- None."];
+  return items.flatMap((item) => [
+    `- ${getText(item, "question")}`,
+    `${safeString(item.answer_en) ? `  - EN: ${safeString(item.answer_en)}` : "  - EN: -"}`,
+    `${safeString(item.answer_zh) ? `  - 中文: ${safeString(item.answer_zh)}` : "  - 中文: -"}`,
+    `  - Confidence: ${safeString(item.confidence) || "medium"}`,
+  ]);
 }
 
 function markdownNews(items: Array<Record<string, unknown>>) {

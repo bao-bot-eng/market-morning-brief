@@ -44,7 +44,6 @@
               <span class="label">Market monitor</span>
               <h1>US Market Morning Brief</h1>
             </div>
-            <button class="secondary-button" id="logoutButton" type="button">Logout</button>
           </header>
 
           <section class="status-strip">
@@ -66,6 +65,7 @@
             </div>
           </section>
 
+          <section class="home-view" id="homeView">
           <section class="generate-panel">
             <label>
               US Date
@@ -87,8 +87,16 @@
             </div>
             <p class="message" id="appMessage"></p>
           </section>
+          </section>
 
           <section class="brief-view hidden" id="briefView">
+            <div class="brief-toolbar">
+              <button class="secondary-button" id="backButton" type="button">Back</button>
+              <div class="brief-actions-compact">
+                <button class="secondary-button" id="copyBriefButton" type="button">Copy</button>
+                <button class="secondary-button" id="downloadBriefButton" type="button">Download</button>
+              </div>
+            </div>
             <div class="notice" id="sourceNotice"></div>
 
             <section class="section-block">
@@ -121,6 +129,13 @@
                 <h2>Next 1-2 Weeks Watchlist</h2>
               </div>
               <div class="timeline" id="watchlist"></div>
+            </section>
+            <section class="section-block" id="followUpSection">
+              <div class="section-head">
+                <span class="label">Follow-up</span>
+                <h2>Yesterday's Questions</h2>
+              </div>
+              <div id="followUps"></div>
             </section>
 
             <section class="question-panel">

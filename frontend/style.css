@@ -149,7 +149,7 @@ input[type="date"] {
 
 .dashboard {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .app-header,
@@ -247,13 +247,13 @@ input[type="date"] {
 
 .brief-view {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .section-block,
 .question-panel,
 .advice-note {
-  padding: 16px;
+  padding: 14px;
 }
 
 .section-head {
@@ -277,7 +277,7 @@ input[type="date"] {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px;
 }
 
 .summary-card h3,
@@ -584,5 +584,121 @@ body[data-mode="quick"] .news-card details {
   .secondary-button,
   .danger-button {
     width: 100%;
+  }
+}
+
+
+.home-view {
+  display: grid;
+  gap: 14px;
+}
+
+.brief-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0 2px;
+  background: linear-gradient(180deg, rgba(238, 242, 245, 0.98), rgba(238, 242, 245, 0.82));
+  backdrop-filter: blur(8px);
+}
+
+.brief-actions-compact {
+  display: flex;
+  gap: 8px;
+}
+
+.empty-category {
+  opacity: 0.66;
+}
+
+.empty-category .category-head {
+  filter: saturate(0.55);
+}
+
+.empty-category .empty-card {
+  color: var(--muted);
+  background: var(--surface-muted);
+}
+
+#followUps {
+  display: grid;
+  gap: 10px;
+}
+
+.follow-up-card {
+  background: #fbfcf7;
+}
+
+@media (max-width: 780px) {
+  main {
+    width: min(100vw - 12px, 100%);
+  }
+
+  .app-header,
+  .status-strip,
+  .generate-panel,
+  .section-block,
+  .question-panel,
+  .advice-note {
+    box-shadow: 0 6px 18px rgba(18, 32, 47, 0.06);
+  }
+
+  .app-header {
+    padding: 14px;
+  }
+
+  .app-header h1 {
+    font-size: 1.45rem;
+    line-height: 1.15;
+  }
+
+  .status-strip > div {
+    padding: 11px;
+  }
+
+  .generate-panel {
+    gap: 11px;
+    padding: 12px;
+  }
+
+  .summary-grid,
+  .news-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .section-head {
+    margin-bottom: 10px;
+  }
+
+  .section-head h2,
+  .question-panel h2 {
+    font-size: 1.08rem;
+  }
+
+  .summary-card h3,
+  .news-card h3,
+  .event-card h3,
+  .timeline-item h3 {
+    font-size: 1rem;
+  }
+
+  .en,
+  .zh,
+  .news-card p,
+  .summary-card p {
+    line-height: 1.42;
+    margin: 8px 0;
+  }
+
+  .brief-toolbar .secondary-button,
+  .brief-actions-compact .secondary-button {
+    width: auto;
+    min-height: 38px;
+    padding: 0 12px;
   }
 }

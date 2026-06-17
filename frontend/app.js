@@ -53,7 +53,12 @@ const elements = {
   historyButton: document.querySelector("#historyButton"),
   copyButton: document.querySelector("#copyButton"),
   downloadButton: document.querySelector("#downloadButton"),
-  logoutButton: document.querySelector("#logoutButton"),
+  homeView: document.querySelector("#homeView"),
+  backButton: document.querySelector("#backButton"),
+  copyBriefButton: document.querySelector("#copyBriefButton"),
+  downloadBriefButton: document.querySelector("#downloadBriefButton"),
+  followUpSection: document.querySelector("#followUpSection"),
+  followUps: document.querySelector("#followUps"),
   historyDrawer: document.querySelector("#historyDrawer"),
   closeHistoryButton: document.querySelector("#closeHistoryButton"),
   historyList: document.querySelector("#historyList"),
@@ -91,12 +96,16 @@ function bindEvents() {
   elements.generateButton.addEventListener("click", () => generateBrief(false));
   elements.historyButton.addEventListener("click", openHistory);
   elements.closeHistoryButton.addEventListener("click", () => elements.historyDrawer.classList.remove("open"));
-  elements.logoutButton.addEventListener("click", logout);
+  elements.backButton.addEventListener("click", goHome);
   elements.copyButton.addEventListener("click", copyMarkdown);
   elements.downloadButton.addEventListener("click", downloadMarkdown);
+  elements.copyBriefButton.addEventListener("click", copyMarkdown);
+  elements.downloadBriefButton.addEventListener("click", downloadMarkdown);
   elements.quickModeButton.addEventListener("click", () => setMode("quick"));
   elements.readingModeButton.addEventListener("click", () => setMode("reading"));
+  window.addEventListener("hashchange", syncRoute);
 }
+
 
 async function login(event) {
   event.preventDefault();
@@ -153,6 +162,7 @@ async function generateBrief(forceRegenerate, existingId = "") {
   state.currentGeneratedAt = response.generated_at || response.brief_json?.generated_at || "";
   state.currentWarning = response.warning || "";
   renderBrief(response);
+  showBriefView(true);
   await loadHistory();
   setMessage(elements.appMessage, "Brief generated and saved.");
 }
@@ -180,6 +190,7 @@ async function openBrief(briefId) {
   state.currentWarning = response.warning || "";
   renderBrief(response);
   elements.historyDrawer.classList.remove("open");
+  showBriefView(true);
   setMessage(elements.appMessage, "Loaded saved brief.");
 }
 
@@ -236,6 +247,7 @@ function renderBrief(response) {
   renderEvents(brief.hard_events_today || []);
   renderCategories(brief.categories || {});
   renderWatchlist(brief.next_1_2_weeks_watchlist || []);
+  renderFollowUps(brief.previous_question_followups || []);
   renderQuestions(brief.observation_questions || []);
   applyMode();
 }
@@ -285,17 +297,21 @@ function renderEvents(items) {
 
 function renderCategories(categories) {
   elements.categoryList.innerHTML = "";
-  CATEGORY_ORDER.forEach((category) => {
-    const items = categories[category] || [];
+  const sortedCategories = CATEGORY_ORDER
+    .map((category) => ({ category, items: categories[category] || [] }))
+    .sort((a, b) => Number(b.items.length > 0) - Number(a.items.length > 0));
+
+  sortedCategories.forEach(({ category, items }) => {
     const limit = state.mode === "quick" ? 2 : items.length;
     const cards = items.slice(0, limit).map((item) => newsCard(item, category)).join("");
+    const isEmpty = items.length === 0;
     elements.categoryList.appendChild(createNode(`
-      <section class="category-section">
+      <section class="category-section ${isEmpty ? "empty-category" : ""}">
         <button class="category-head ${CATEGORY_CLASS[category]}" type="button">
           <span>${escapeHtml(category)}</span>
           <strong>${items.length}</strong>
         </button>
-        <div class="news-grid">${cards || emptyCard("No items in this category.")}</div>
+        <div class="news-grid">${cards || emptyCard("No notable items returned for this category.")}</div>
       </section>
     `));
   });
@@ -348,6 +364,26 @@ function renderWatchlist(items) {
         <p class="zh">${escapeHtml(item.why_it_matters_zh || "")}</p>
         <div class="chips">${chips(item.related_assets)}</div>
         ${sourceButton(item.url, item.source || "Source")}
+      </article>
+    `));
+  });
+}
+
+function renderFollowUps(items) {
+  elements.followUps.innerHTML = "";
+  elements.followUpSection.classList.toggle("hidden", !items.length);
+  if (!items.length) return;
+
+  items.forEach((item, index) => {
+    elements.followUps.appendChild(createNode(`
+      <article class="question-card follow-up-card">
+        <strong>${index + 1}</strong>
+        <div>
+          <p>${escapeHtml(item.question_en || item.en || "")}</p>
+          <p class="zh">${escapeHtml(item.question_zh || item.zh || "")}</p>
+          <p><b>Follow-up:</b> ${escapeHtml(item.answer_en || item.follow_up_en || "")}</p>
+          <p class="zh"><b>回看：</b>${escapeHtml(item.answer_zh || item.follow_up_zh || "")}</p>
+        </div>
       </article>
     `));
   });
@@ -413,12 +449,46 @@ function applyMode() {
   document.body.dataset.mode = state.mode;
 }
 
+function showBriefView(updateHash = false) {
+  elements.homeView.classList.add("hidden");
+  elements.briefView.classList.remove("hidden");
+  if (updateHash && location.hash !== "#brief") {
+    history.pushState(null, "", "#brief");
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function showHomeView(updateHash = false) {
+  elements.homeView.classList.remove("hidden");
+  elements.briefView.classList.add("hidden");
+  if (updateHash && location.hash !== "#home") {
+    history.pushState(null, "", "#home");
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function goHome() {
+  if (location.hash === "#brief") {
+    history.back();
+    return;
+  }
+  showHomeView(true);
+}
+
+function syncRoute() {
+  if (location.hash === "#brief" && state.currentBrief) {
+    showBriefView(false);
+    return;
+  }
+  showHomeView(false);
+}
+
 function openHistory() {
   loadHistory();
   elements.historyDrawer.classList.add("open");
 }
 
-function logout() {
+function clearSession() {
   state.token = "";
   state.expiresAt = "";
   state.currentBrief = null;
@@ -466,7 +536,7 @@ function renderAuthState() {
 
 function requireSession(showMessage = true) {
   if (isSessionValid()) return true;
-  logout();
+  clearSession();
   if (showMessage) {
     setMessage(elements.loginMessage, "Session expired. Please log in again.", true);
   }
@@ -479,7 +549,7 @@ function isSessionValid() {
 
 function handleApiError(response) {
   if ((response.error || "").toLowerCase().includes("session expired")) {
-    logout();
+    clearSession();
     setMessage(elements.loginMessage, "Session expired. Please log in again.", true);
     return;
   }
